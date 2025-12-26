@@ -9,6 +9,15 @@ from io import StringIO
 import time
 
 # ==========================================
+# 0. CONSTANTS (ここを追加しました)
+# ==========================================
+COLOR_BG = "#000000"
+COLOR_HEADER_RED = "#800000"
+COLOR_STYLE_ORANGE = "#FF9900"
+COLOR_STYLE_TEXT_ORANGE = "#FFB03B"
+COLOR_PANEL_BG = "#0A0A0A"
+
+# ==========================================
 # 1. ページ設定 & CSS (全画面・ダークテーマ化)
 # ==========================================
 st.set_page_config(layout="wide", page_title="eKIX Pro Web", initial_sidebar_state="collapsed")
@@ -18,50 +27,50 @@ if 'launched' not in st.session_state:
     st.session_state.launched = False
 
 # CSS: ブラウザの余白を極限まで削り、デスクトップアプリ風にする
-st.markdown("""
+st.markdown(f"""
 <style>
     /* 全体の背景と色 */
-    .stApp {
-        background-color: #000000;
+    .stApp {{
+        background-color: {COLOR_BG};
         color: #E0E0E0;
-    }
+    }}
     /* ヘッダーを隠す (全画面感) */
-    header {visibility: hidden;}
+    header {{visibility: hidden;}}
     
     /* ブロックごとの余白調整 */
-    .block-container {
+    .block-container {{
         padding-top: 1rem;
         padding-bottom: 0rem;
         padding-left: 1rem;
         padding-right: 1rem;
-    }
+    }}
     
     /* ボタンデザイン (eKIX Orange) */
-    div.stButton > button {
-        background-color: #FF9900;
+    div.stButton > button {{
+        background-color: {COLOR_STYLE_ORANGE};
         color: #000000;
         font-weight: bold;
         border-radius: 0px;
         border: 1px solid #333;
         width: 100%;
-    }
-    div.stButton > button:hover {
-        background-color: #FFB03B;
+    }}
+    div.stButton > button:hover {{
+        background-color: {COLOR_STYLE_TEXT_ORANGE};
         color: #000000;
         border-color: #FFF;
-    }
+    }}
     
     /* テキストエリア (エディタ風) */
-    .stTextArea textarea {
+    .stTextArea textarea {{
         background-color: #080808;
-        color: #FFB03B; 
+        color: {COLOR_STYLE_TEXT_ORANGE}; 
         font-family: 'Consolas', monospace;
         font-size: 14px;
         border: 1px solid #333;
-    }
+    }}
     
     /* コンソール出力エリア */
-    .console-box {
+    .console-box {{
         background-color: #080808;
         color: #E0E0E0;
         font-family: 'Consolas', monospace;
@@ -70,11 +79,11 @@ st.markdown("""
         height: 300px;
         overflow-y: scroll;
         white-space: pre-wrap;
-    }
+    }}
     
     /* タイトルなどの装飾 */
-    h1, h2, h3 { color: #800000 !important; font-family: 'Arial', sans-serif; }
-    hr { margin: 0.5em 0; border-color: #333; }
+    h1, h2, h3 {{ color: {COLOR_HEADER_RED} !important; font-family: 'Arial', sans-serif; }}
+    hr {{ margin: 0.5em 0; border-color: #333; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -249,6 +258,7 @@ if not st.session_state.launched:
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
         st.markdown("<br><br><br><br>", unsafe_allow_html=True)
+        # 修正: f-stringでCOLOR_HEADER_REDを参照できるようになりました
         st.markdown(f"<h1 style='text-align: center; color: {COLOR_HEADER_RED};'>eKIX PRO WEB</h1>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center; color: #888;'>Integrated Quant Environment (Cloud Edition)</p>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
@@ -261,7 +271,7 @@ else:
     # --- 全画面ターミナルモード ---
     
     # 1. ヘッダーバー
-    st.markdown(f"<div style='background-color: #111; padding: 5px; border-bottom: 2px solid #800000;'><b>eKIX PRO</b> <span style='color:#888; font-size:0.8em;'>| SESSION ACTIVE</span></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='background-color: #111; padding: 5px; border-bottom: 2px solid {COLOR_HEADER_RED};'><b>eKIX PRO</b> <span style='color:#888; font-size:0.8em;'>| SESSION ACTIVE</span></div>", unsafe_allow_html=True)
 
     # 2. 上段: チャート(左) + コントロールパネル(右)
     # Streamlitのcolumns比率でPanedWindowを再現
@@ -275,7 +285,7 @@ else:
         if df is not None:
             # mplfinanceの設定
             mc = mpf.make_marketcolors(up='#00ff00', down='#ff0000', edge='inherit', wick='inherit', volume='in')
-            s = mpf.make_mpf_style(base_mpf_style='nightclouds', marketcolors=mc, facecolor='#000000', figcolor='#000000', gridstyle=':')
+            s = mpf.make_mpf_style(base_mpf_style='nightclouds', marketcolors=mc, facecolor=COLOR_BG, figcolor=COLOR_BG, gridstyle=':')
             
             try:
                 fig, ax = mpf.plot(
