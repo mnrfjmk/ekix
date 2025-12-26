@@ -1,4 +1,4 @@
-streamlit
+flet
 yfinance
 mplfinance
 pandas
