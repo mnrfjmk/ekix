@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import traceback
 from io import StringIO
+import time
 
 # ==========================================
 # 0. CONSTANTS & THEME
@@ -14,79 +15,106 @@ COLOR_HEADER_RED = "#800000"
 COLOR_STYLE_ORANGE = "#FF9900"
 COLOR_STYLE_TEXT_ORANGE = "#FFB03B"
 COLOR_BORDER = "#333333"
+COLOR_PANEL_BG = "#0A0A0A"
 
 # ==========================================
-# 1. PAGE CONFIG & RIGID CSS
+# 1. PAGE CONFIG & PIXEL-PERFECT CSS
 # ==========================================
 st.set_page_config(layout="wide", page_title="eKIX PRO", initial_sidebar_state="collapsed")
 
-# 起動状態
+# 起動状態管理
 if 'launched' not in st.session_state:
     st.session_state.launched = False
 
-# CSS: 徹底的な固定レイアウト化
+# CSS: 徹底的なスタイル強制
 st.markdown(f"""
 <style>
-    /* 全体のリセット */
+    /* ----------------------------------
+       BASE RESET
+    ---------------------------------- */
     .stApp {{
         background-color: {COLOR_BG};
         color: #E0E0E0;
     }}
-    header {{display: none !important;}}
-    footer {{display: none !important;}}
+    header, footer {{display: none !important;}}
     
-    /* 余白の完全削除 */
+    /* 余白削除: 画面いっぱいに使う */
     .block-container {{
         padding: 0rem !important;
         max-width: 100% !important;
     }}
 
-    /* Streamlitの固定コンテナ(st.container)のデザイン上書き */
+    /* コンテナの枠線と背景 */
     div[data-testid="stVerticalBlockBorderWrapper"] {{
-        background-color: #000;
+        background-color: {COLOR_BG};
         border: 1px solid {COLOR_BORDER};
         border-radius: 0px !important;
         padding: 0px !important;
     }}
-    
-    /* 内部のスクロールバー装飾 */
-    ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
-    ::-webkit-scrollbar-track {{ background: #111; }}
-    ::-webkit-scrollbar-thumb {{ background: #444; border-radius: 0px; }}
-    ::-webkit-scrollbar-thumb:hover {{ background: {COLOR_STYLE_ORANGE}; }}
 
-    /* ボタンデザイン */
+    /* ----------------------------------
+       WIDGET STYLING
+    ---------------------------------- */
+    
+    /* ボタン (eKIX Style) */
     div.stButton > button {{
         background-color: {COLOR_STYLE_ORANGE};
         color: #000000;
+        font-family: Arial, sans-serif;
         font-weight: bold;
         border-radius: 0px;
-        border: none;
+        border: 1px solid #222;
         width: 100%;
-        height: 30px;
-        margin-top: 5px;
+        height: 28px;
+        line-height: 28px;
+        padding: 0px;
+        margin: 0px;
     }}
     div.stButton > button:hover {{
         background-color: {COLOR_STYLE_TEXT_ORANGE};
         color: #000;
+        border-color: #FFF;
     }}
 
-    /* エディタの入力エリア */
+    /* テキストエリア (Editor & Console 共通) */
+    .stTextArea {{ margin-bottom: 0px; }}
+    .stTextArea label {{ display: none; }} /* ラベルを完全に隠す */
+    
     .stTextArea textarea {{
-        background-color: #080808;
-        color: {COLOR_STYLE_TEXT_ORANGE}; 
-        font-family: 'Consolas', monospace;
-        border: none;
+        background-color: #080808 !important;
+        color: {COLOR_STYLE_TEXT_ORANGE} !important;
+        font-family: 'Consolas', 'Courier New', monospace !important;
+        font-size: 13px !important;
+        line-height: 1.4 !important;
+        border: none !important;
+        border-radius: 0px !important;
+        padding: 10px !important;
     }}
     
-    /* カスタムヘッダー */
+    /* Disabledなテキストエリア（コンソール用）の文字色を強制的に濃くする */
+    .stTextArea textarea[disabled] {{
+        color: {COLOR_STYLE_TEXT_ORANGE} !important;
+        -webkit-text-fill-color: {COLOR_STYLE_TEXT_ORANGE} !important;
+        opacity: 1 !important;
+    }}
+
+    /* スクロールバー */
+    ::-webkit-scrollbar {{ width: 10px; height: 10px; }}
+    ::-webkit-scrollbar-track {{ background: #111; }}
+    ::-webkit-scrollbar-thumb {{ background: #333; border: 1px solid #000; }}
+    ::-webkit-scrollbar-thumb:hover {{ background: {COLOR_STYLE_ORANGE}; }}
+
+    /* ----------------------------------
+       CUSTOM HTML COMPONENTS
+    ---------------------------------- */
     .app-header {{
         background-color: #111;
-        height: 30px;
+        height: 32px;
         display: flex;
         align-items: center;
         border-bottom: 2px solid {COLOR_HEADER_RED};
         padding: 0 10px;
+        font-family: Arial, sans-serif;
     }}
     .header-logo {{
         background-color: {COLOR_HEADER_RED};
@@ -94,7 +122,27 @@ st.markdown(f"""
         font-weight: bold;
         padding: 2px 8px;
         font-size: 11px;
-        margin-right: 10px;
+        margin-right: 15px;
+    }}
+    .panel-header {{
+        color: {COLOR_STYLE_ORANGE};
+        font-weight: bold;
+        font-size: 11px;
+        font-family: Arial, sans-serif;
+        padding: 5px;
+        border-bottom: 1px solid #333;
+        margin-bottom: 5px;
+    }}
+    
+    /* ツールバーのスタイル調整 */
+    .toolbar-box {{
+        background-color: #151515;
+        height: 36px;
+        border-top: 1px solid {COLOR_BORDER};
+        border-bottom: 1px solid {COLOR_BORDER};
+        display: flex;
+        align-items: center;
+        padding: 0 5px;
     }}
 </style>
 """, unsafe_allow_html=True)
@@ -102,18 +150,17 @@ st.markdown(f"""
 # ==========================================
 # 2. STATE & LOGIC
 # ==========================================
-# 状態変数の初期化
 if 'chart_data' not in st.session_state: st.session_state.chart_data = None
 if 'chart_config' not in st.session_state: st.session_state.chart_config = {"title": "", "mav": ()}
 if 'console_log' not in st.session_state: st.session_state.console_log = ">>> eKIX Pro Web Initialized.\n"
 if 'panel_buttons' not in st.session_state: st.session_state.panel_buttons = []
 if 'script_scope' not in st.session_state: st.session_state.script_scope = {}
+if 'status_msg' not in st.session_state: st.session_state.status_msg = "Ready"
 
-# デフォルトコード
 DEFAULT_CODE = """# eKIX Logic Script
 import pandas as pd
 
-# 状態管理クラス
+# 状態保持クラス
 class State:
     def __init__(self):
         self.symbols = ["USDJPY=X", "EURUSD=X", "BTC-USD", "^N225"]
@@ -133,11 +180,11 @@ def main():
     if df is not None:
         title = f"{sym} - {state.tf}"
         app.api_plot_candle(df, title=title, mav=(20, 50))
-        print("Chart updated.")
+        print("Chart updated successfully.")
     else:
-        print("No data.")
+        print("No data found.")
 
-# パネルUI構築
+# パネル構築
 app.api_clear_panel()
 app.api_add_right_label("=== CONTROLS ===")
 
@@ -146,7 +193,7 @@ def change_sym():
     main()
 
 app.api_add_right_button("Rotate Symbol", change_sym)
-app.api_add_right_button("Refresh", main)
+app.api_add_right_button("Force Refresh", main)
 
 # 初回実行
 main()
@@ -175,7 +222,8 @@ class WebQuantTerminal:
         st.session_state.panel_buttons = []
 
     def api_add_right_label(self, text):
-        pass 
+        # ログには出さず、UI構築用として処理（今回はシンプル化のためスキップ）
+        pass
 
     def api_add_right_button(self, text, command, color=None):
         st.session_state.panel_buttons.append({"text": text, "func_name": command.__name__})
@@ -194,6 +242,7 @@ def execute_logic(target_func=None):
         st.session_state.script_scope["app"] = api
         st.session_state.script_scope["print"] = scoped_print
 
+    st.session_state.status_msg = "Running..."
     try:
         if target_func:
             func = st.session_state.script_scope.get(target_func)
@@ -202,11 +251,13 @@ def execute_logic(target_func=None):
             exec(st.session_state.user_code, st.session_state.script_scope)
         
         st.session_state.console_log += buffer.getvalue()
+        st.session_state.status_msg = "Ready"
     except Exception:
         st.session_state.console_log += f"\nERR: {traceback.format_exc()}"
+        st.session_state.status_msg = "Error"
 
 # ==========================================
-# 3. UI RENDERING (FIXED GRID LAYOUT)
+# 3. UI RENDERING (FIXED LAYOUT)
 # ==========================================
 
 if not st.session_state.launched:
@@ -219,99 +270,97 @@ if not st.session_state.launched:
             st.session_state.launched = True
             st.rerun()
 else:
-    # --- TERMINAL HEADER ---
+    # ---------------------------------------------------------
+    # [A] Header Strip
+    # ---------------------------------------------------------
     st.markdown(f"""
     <div class="app-header">
         <div class="header-logo">eKIX PRO</div>
-        <div style="color: #666; font-size: 12px; font-family: Arial;">WEB TERMINAL ENV</div>
+        <div style="color: #666; font-size: 11px; font-weight:bold;">WEB ENV</div>
         <div style="flex-grow:1"></div>
-        <div style="color: {COLOR_STYLE_ORANGE}; font-size: 12px;">● LIVE</div>
+        <div style="color: {COLOR_STYLE_ORANGE}; font-size: 11px;">● LIVE</div>
     </div>
     """, unsafe_allow_html=True)
 
-    # ========================================================
-    # GRID LAYOUT: Using st.container(height=...) for RIGIDITY
-    # ========================================================
-    
-    # CSS Gridの代わりに、Streamlitの新しい固定高コンテナを使用します。
-    # これにより、内部コンテンツが増減しても外枠のサイズが絶対にかわりません。
-    
-    # TOP ROW: Height 550px
-    c_top_left, c_top_right = st.columns([3.5, 1], gap="small")
-    
-    # --- TOP LEFT: CHART ---
-    with c_top_left:
-        with st.container(height=550, border=True):
+    # ---------------------------------------------------------
+    # [B] Top Area: Chart (Left) | Panel (Right)
+    # ---------------------------------------------------------
+    c_chart, c_panel = st.columns([3.5, 1], gap="small")
+
+    with c_chart:
+        # 固定高コンテナ (Height 500px)
+        with st.container(height=500, border=True):
             df = st.session_state.chart_data
             cfg = st.session_state.chart_config
             
             if df is not None:
-                # グラフ設定
+                # チャート描画
                 mc = mpf.make_marketcolors(up='#00ff00', down='#ff0000', edge='inherit', wick='inherit', volume='in')
                 s = mpf.make_mpf_style(base_mpf_style='nightclouds', marketcolors=mc, facecolor='#000000', figcolor='#000000', gridstyle=':')
                 
-                # 図の比率をコンテナに合わせる (スクロールバーが出ないように調整)
+                # コンテナサイズに合わせた図のサイズ調整
                 fig, ax = mpf.plot(
                     df, type='candle', style=s, volume=True,
                     mav=cfg['mav'], title=f"\n{cfg['title']}",
                     returnfig=True, 
-                    figsize=(10, 6), 
+                    figsize=(10, 5.8), # 高さを微調整してスクロールを防止
                     tight_layout=True
                 )
                 st.pyplot(fig, use_container_width=True)
             else:
-                st.markdown("<div style='height: 100%; display:flex; align-items:center; justify-content:center; color:#333;'>NO DATA LOADED</div>", unsafe_allow_html=True)
+                st.markdown("<div style='height: 100%; display:flex; align-items:center; justify-content:center; color:#333; font-family:Arial;'>NO DATA LOADED</div>", unsafe_allow_html=True)
 
-    # --- TOP RIGHT: PANEL ---
-    with c_top_right:
-        with st.container(height=550, border=True):
-            st.markdown(f"<div style='color:{COLOR_STYLE_ORANGE}; font-weight:bold; margin-bottom:10px;'>COMMAND PANEL</div>", unsafe_allow_html=True)
+    with c_panel:
+        # パネルコンテナ (Height 500px)
+        with st.container(height=500, border=True):
+            st.markdown('<div class="panel-header">COMMAND PANEL</div>', unsafe_allow_html=True)
             
+            # 動的ボタン描画
             if st.session_state.panel_buttons:
                 for btn in st.session_state.panel_buttons:
                     if st.button(btn["text"], key=f"btn_{btn['text']}"):
                         execute_logic(btn["func_name"])
                         st.rerun()
             else:
-                st.caption("No active commands.")
+                st.caption("No commands.")
             
             st.markdown("---")
             if st.button("RESET VIEW"): st.rerun()
 
-    # BOTTOM ROW: Height 300px
-    c_bot_left, c_bot_right = st.columns([1, 1], gap="small")
+    # ---------------------------------------------------------
+    # [C] Toolbar (Run Button & Status) - 元のTkinter版と同じ位置
+    # ---------------------------------------------------------
+    # CSSで高さを固定したツールバーエリア
+    with st.container():
+        # 少し色をつけるためコンテナを使うが、CSSでクラス指定が難しいため
+        # 単純なカラムレイアウトで再現
+        col_tb_btn, col_tb_stat = st.columns([1, 6])
+        with col_tb_btn:
+            if st.button("▶ RUN ASYNC"):
+                with st.spinner(".."):
+                    execute_logic()
+                st.rerun()
+        with col_tb_stat:
+            # ステータス表示
+            status_color = "#888" if st.session_state.status_msg == "Ready" else COLOR_STYLE_ORANGE
+            st.markdown(f"<div style='height: 30px; line-height: 30px; margin-left: 10px; color: {status_color}; font-family: Arial; font-weight: bold; font-size: 11px;'>{st.session_state.status_msg}</div>", unsafe_allow_html=True)
 
-    # --- BOTTOM LEFT: EDITOR ---
-    with c_bot_left:
-        # コンテナの中にエディタとRUNボタンを入れる
+    # ---------------------------------------------------------
+    # [D] Bottom Area: Editor (Left) | Console (Right)
+    # ---------------------------------------------------------
+    c_edit, c_cons = st.columns([1, 1], gap="small")
+
+    # 高さ300px固定
+    with c_edit:
         with st.container(height=300, border=True):
-            # RUNボタンをタブのように配置
-            col_run, col_label = st.columns([1, 3])
-            with col_run:
-                if st.button("▶ RUN ASYNC"):
-                    with st.spinner(".."):
-                        execute_logic()
-                    st.rerun()
-            
-            # コードエディタ (高さはCSSで調整済みだが、ここでもfitさせる)
-            code = st.text_area("Code", value=st.session_state.user_code, height=220, label_visibility="collapsed")
+            # Editor
+            code = st.text_area("Code", value=st.session_state.user_code, height=290, label_visibility="collapsed")
             st.session_state.user_code = code
 
-    # --- BOTTOM RIGHT: CONSOLE ---
-    with c_bot_right:
+    with c_cons:
         with st.container(height=300, border=True):
-            st.markdown(f"<div style='color:#666; font-size:12px; margin-bottom:5px;'>TERMINAL OUTPUT</div>", unsafe_allow_html=True)
+            # Console: disabled=Trueにすることで編集不可にし、CSSで色を維持
+            # これによりHTMLタグの問題も解消し、ネイティブなスクロールが効く
+            st.text_area("Console", value=st.session_state.console_log, height=290, disabled=True, label_visibility="collapsed")
             
-            # ログ表示エリア (HTMLでスクロール領域を作る)
-            log_html = f"""
-            <div style='font-family:"Consolas",monospace; color:{COLOR_STYLE_TEXT_ORANGE}; font-size:12px; white-space:pre-wrap;'>
-            {st.session_state.console_log}
-            </div>
-            """
-            st.markdown(log_html, unsafe_allow_html=True)
-            
-            # 一番下にクリアボタン
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("CLEAR LOG"):
-                st.session_state.console_log = ">>> Log Cleared.\n"
-                st.rerun()
+            # クリアボタンはスペース節約のため省略するか、ログの先頭にコマンドとして追加する運用を想定
